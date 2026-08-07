@@ -1,4 +1,4 @@
-# 🍼 GLM-5.2 Baby (120M) - From Scratch
+# 🍼 Nano-GLM (GLM-5.2 Baby 120M) - From Scratch
 
 This repository contains a from-scratch implementation and pretraining script for a "baby" version (~120M parameters) of **GLM-5.2** (GLM MoE DSA). It is heavily inspired by Andrej Karpathy's `nanoGPT` and aims to be highly educational.
 
