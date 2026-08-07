@@ -48,7 +48,7 @@ import torch.utils.checkpoint
 # Section 1: Model Configuration
 # =============================================================================
 # The full GLM-5.2 has 78 layers, 6144 hidden, 256 experts — far too large.
-# We scale everything down to ~120M total params while preserving EVERY
+# Everything is scaled down to ~120M total params while preserving EVERY
 # architectural innovation. Think of this as "baby GLM-5.2".
 # =============================================================================
 
@@ -119,7 +119,7 @@ class GLM5Config:
         n_dense = min(self.first_k_dense_replace, self.num_hidden_layers)
         self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # DSA indexer pattern: alternating "full" (run indexer) / "shared" (reuse previous)
-        # Full GLM-5.2 uses a freq/offset schedule; we simplify to alternating.
+        # Full GLM-5.2 uses a freq/offset schedule; this simplifies to alternating.
         self.indexer_types = [
             "full" if i % 2 == 0 else "shared" for i in range(self.num_hidden_layers)
         ]
@@ -128,7 +128,7 @@ class GLM5Config:
 # =============================================================================
 # Section 2: Architecture Components
 # =============================================================================
-# We build each component bottom-up, with detailed comments explaining
+# Each component is built bottom-up, with detailed comments explaining
 # WHY each design choice was made in GLM-5.2.
 # =============================================================================
 
@@ -294,7 +294,7 @@ class TopKRouter(nn.Module):
         scores_for_choice = scores + self.e_score_correction_bias
 
         # Step 2: Group-based routing
-        # With n_group=1 (our config), this is standard top-k.
+        # With n_group=1 (the current config), this is standard top-k.
         # With n_group>1 (full GLM-5.2), first select best groups, then pick
         # top experts only from those groups — prevents cross-group interference.
         group_scores = (
@@ -333,7 +333,7 @@ class MoEExperts(nn.Module):
     """
     Collection of expert MLPs stored as batched 3D parameter tensors.
 
-    Instead of N separate nn.Linear modules, we store ALL expert weights
+    Instead of N separate nn.Linear modules, ALL expert weights are stored
     in single tensors. This enables efficient batched dispatch.
 
       gate_up_proj: [num_experts, 2*intermediate, hidden]
@@ -472,7 +472,7 @@ class DSAIndexer(nn.Module):
         self.wq_b = nn.Linear(self.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.wk = nn.Linear(self.hidden_size, self.head_dim, bias=False)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
-        # Learned per-head importance: "how much should we trust each head's score?"
+        # Learned per-head importance: "how much should each head's score be trusted?"
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 

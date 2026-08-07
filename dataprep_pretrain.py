@@ -59,7 +59,7 @@ GPT2_EOT = 50256
 # Dataset Iterators
 # =============================================================================
 # Each iterator yields raw text strings from a HuggingFace dataset stream.
-# Streaming means we never hold the full dataset in memory.
+# Streaming avoids holding the full dataset in memory.
 # =============================================================================
 
 
@@ -110,9 +110,9 @@ def iter_gutenberg():
 
 def iter_starcoder():
     """
-    Stream Python code from The Stack v2 (non-gated subset).
+    Streams Python code from The Stack v2 (non-gated subset).
 
-    If you want the full StarCoder dataset instead, first authenticate:
+    To use the full StarCoder dataset instead, first authenticate:
         huggingface-cli login
     Then change 'bigcode/the-stack-v2-train-smol-ids' below to 'bigcode/starcoderdata'.
     """
@@ -231,7 +231,7 @@ def tokenize_and_write(
         doc_count += 1
         pbar.update(len(tokens))
 
-        # Check if we've reached the target
+        # Check if the target has been reached
         if train_total + val_total >= target_tokens:
             break
 
