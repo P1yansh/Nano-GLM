@@ -1,0 +1,16 @@
+# Requirements for "Let's Reproduce GLM-5.2"
+# Install with: pip install -r requirements.txt
+
+# Core
+torch>=2.1.0
+numpy>=1.24.0
+
+# Tokenization (GPT-2 BPE tokenizer)
+tiktoken>=0.5.0
+
+# Data Preparation (used by dataprep_pretrain.py)
+datasets>=2.14.0
+transformers>=4.30.0
+
+# Progress bars
+tqdm>=4.65.0

@@ -1,0 +1,16 @@
+{
+  "tokenizer": "gpt2",
+  "vocab_size": 50257,
+  "eot_token": 50256,
+  "dtype": "uint16",
+  "train_tokens": 1979887628,
+  "val_tokens": 19913769,
+  "total_tokens": 1999801397,
+  "sources": [
+    "fineweb_edu",
+    "wikipedia",
+    "gutenberg",
+    "starcoder"
+  ],
+  "val_ratio": 0.01
+}

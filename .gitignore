@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project specific ignores
+# Ignore the large dataset binaries
+data/*.bin
+data_phase3/*.bin
+
+# Ignore checkpoints
+out_glm5/*.pt
+*.pt
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# VSCode workspace / agents
+.agents/
