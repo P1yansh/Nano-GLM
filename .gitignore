@@ -14,12 +14,15 @@ env.bak/
 venv.bak/
 
 # Project specific ignores
-# Ignore the large dataset binaries
-data/*.bin
-data_phase3/*.bin
+# Ignore large dataset binaries and numpy files
+data/
+data_phase3/
+*.bin
+*.npy
+*.txt
 
-# Ignore checkpoints
-out_glm5/*.pt
+# Ignore checkpoints and model output folder
+out_glm5/
 *.pt
 
 # IDE / Editor
