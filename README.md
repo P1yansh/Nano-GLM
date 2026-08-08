@@ -1,13 +1,3 @@
----
-title: Nano-GLM (120M MoE)
-emoji: 🧪
-colorFrom: indigo
-colorTo: blue
-sdk: docker
-app_file: app.py
-pinned: false
----
-
 # Nano-GLM (GLM-5.2 Baby 120M) - From Scratch
 
 This repository contains a from-scratch implementation and pretraining script for a baby version (~120M parameters) of GLM-5.2 (GLM MoE DSA). The project is heavily inspired by Andrej Karpathy's nanoGPT and aims to serve as a highly educational resource.
