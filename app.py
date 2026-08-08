@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from contextlib import asynccontextmanager
+from huggingface_hub import hf_hub_download
 
 from train_glm5 import GLM5ForCausalLM, GLM5Config
 
@@ -45,9 +46,17 @@ async def lifespan(app: FastAPI):
             break
 
     if selected_ckpt is None:
-        print("  [WARNING] No model checkpoint found. Serving dummy state.")
-        yield
-        return
+        print("  [WARNING] No model checkpoint found locally. Attempting to download from Hugging Face...")
+        try:
+            # You can set the repo_id via environment variable or hardcode it
+            repo_id = os.environ.get("HF_REPO_ID", "UugaaaBugaaa/nano-glm-120m")
+            selected_ckpt = hf_hub_download(repo_id=repo_id, filename="model_inference.pt", local_dir=out_dir)
+            print(f"  [SUCCESS] Downloaded model from {repo_id}")
+        except Exception as e:
+            print(f"  [ERROR] Failed to download model: {e}")
+            print("  [WARNING] Serving dummy state.")
+            yield
+            return
 
     print(f"  [STARTUP] Loading Nano-GLM model from {selected_ckpt}...")
     checkpoint = torch.load(selected_ckpt, map_location=device, weights_only=False)
