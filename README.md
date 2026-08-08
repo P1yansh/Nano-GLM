@@ -2,7 +2,7 @@
 title: Nano-GLM (120M MoE)
 emoji: 🧪
 colorFrom: indigo
-colorTo: cyan
+colorTo: blue
 sdk: docker
 app_file: app.py
 pinned: false
