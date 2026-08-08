@@ -899,12 +899,12 @@ class GLM5ForCausalLM(nn.Module):
 # =============================================================================
 # Section 3: Data Loading
 # =============================================================================
-# Loads pre-tokenized binary data produced by dataprep_pretrain.py.
+# Loads pre-tokenized binary data produced by scripts/dataprep_pretrain.py.
 # Data format: train.bin / val.bin (uint16 memmap) + meta.json.
 #
-# Run dataprep_pretrain.py first to prepare the data:
-#   python dataprep_pretrain.py              # Full 3.3B tokens
-#   python dataprep_pretrain.py --total_tokens 10000000  # Quick 10M test
+# Run scripts/dataprep_pretrain.py first to prepare the data:
+#   python scripts/dataprep_pretrain.py              # Full 3.3B tokens
+#   python scripts/dataprep_pretrain.py --total_tokens 10000000  # Quick 10M test
 # =============================================================================
 
 
@@ -933,10 +933,10 @@ def load_pretrain_data(data_dir):
         if not os.path.exists(path):
             raise FileNotFoundError(
                 f"  [ERR] {name} not found at: {path}\n"
-                f"        Run dataprep_pretrain.py first to prepare the data:\n"
-                f"          python dataprep_pretrain.py\n"
+                f"        Run scripts/dataprep_pretrain.py first to prepare the data:\n"
+                f"          python scripts/dataprep_pretrain.py\n"
                 f"        Or for a quick test:\n"
-                f"          python dataprep_pretrain.py --total_tokens 10000000"
+                f"          python scripts/dataprep_pretrain.py --total_tokens 10000000"
             )
 
     # --- Load metadata ---

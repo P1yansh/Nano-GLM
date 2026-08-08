@@ -1,16 +1,19 @@
-# Requirements for "Let's Reproduce GLM-5.2"
+# Requirements for Nano-GLM (GLM-5.2 Baby 120M)
 # Install with: pip install -r requirements.txt
 
-# Core
+# Core ML & Math
 torch>=2.1.0
 numpy>=1.24.0
 
-# Tokenization (GPT-2 BPE tokenizer)
+# Tokenization
 tiktoken>=0.5.0
 
-# Data Preparation (used by dataprep_pretrain.py)
+# Data Preparation
 datasets>=2.14.0
 transformers>=4.30.0
-
-# Progress bars
 tqdm>=4.65.0
+
+# API Backend & Cloud Serving
+fastapi>=0.100.0
+uvicorn>=0.22.0
+pydantic>=2.0.0

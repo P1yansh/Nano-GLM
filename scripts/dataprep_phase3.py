@@ -10,7 +10,7 @@ Streams 400 Million tokens of domain-diverse text:
 Outputs to `./data_phase3` to avoid touching active training in `./data`.
 
 Usage:
-  python dataprep_phase3.py
+  python scripts/dataprep_phase3.py
 """
 
 import argparse

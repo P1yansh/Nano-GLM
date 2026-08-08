@@ -16,9 +16,9 @@ Output:
   data/meta.json   -- tokenizer info, vocab size, token counts
 
 Usage:
-  python dataprep_pretrain.py                    # Full 3.3B token run
-  python dataprep_pretrain.py --total_tokens 10000000  # Quick 10M test
-  python dataprep_pretrain.py --no_code          # Skip code data
+  python scripts/dataprep_pretrain.py                    # Full 3.3B token run
+  python scripts/dataprep_pretrain.py --total_tokens 10000000  # Quick 10M test
+  python scripts/dataprep_pretrain.py --no_code          # Skip code data
 
 Estimated runtime: 2-4 hours on CPU with good internet (full run)
 Estimated disk: ~7 GB for output .bin files
