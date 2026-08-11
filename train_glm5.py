@@ -104,7 +104,7 @@ class GLM5Config:
 
     # --- Regularization & Precision ---
     rms_norm_eps: float = 1e-5  # RMSNorm epsilon
-    attention_dropout: float = 0.0  # Attention dropout
+    attention_dropout: float = 0.0  # Attention dropout (0.0 because modern LLM pretraining rarely uses dropout due to massive datasets)
 
     # --- Initialization ---
     initializer_range: float = 0.02  # Std dev for weight init
@@ -687,7 +687,7 @@ class DecoderLayer(nn.Module):
     Pre-norm Transformer decoder layer.
 
     Structure:
-        x → LayerNorm → MLA Attention → +residual → LayerNorm → MLP/MoE → +residual
+        x → RMSNorm → MLA Attention → +residual → RMSNorm → MLP/MoE → +residual
 
     Layers 0..first_k_dense_replace use dense SwiGLU MLP.
     Remaining layers use Mixture-of-Experts (MoE).
