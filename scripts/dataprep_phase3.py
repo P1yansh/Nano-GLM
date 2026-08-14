@@ -134,8 +134,8 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
-    train_path = os.path.join(args.output_dir, "train.bin")
-    val_path = os.path.join(args.output_dir, "val.bin")
+    train_path = os.path.join(args.output_dir, "train.npy")
+    val_path = os.path.join(args.output_dir, "val.npy")
     meta_path = os.path.join(args.output_dir, "meta.json")
 
     encoder = tiktoken.get_encoding(DEFAULT_TOKENIZER)

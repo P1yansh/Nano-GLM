@@ -924,12 +924,19 @@ def load_pretrain_data(data_dir):
     Raises:
       FileNotFoundError if data files are missing.
     """
-    train_path = os.path.join(data_dir, "train.bin")
-    val_path = os.path.join(data_dir, "val.bin")
+    def resolve_path(base_name):
+        bin_p = os.path.join(data_dir, f"{base_name}.bin")
+        npy_p = os.path.join(data_dir, f"{base_name}.npy")
+        if os.path.exists(npy_p):
+            return npy_p, f"{base_name}.npy"
+        return bin_p, f"{base_name}.bin"
+
+    train_path, train_name = resolve_path("train")
+    val_path, val_name = resolve_path("val")
     meta_path = os.path.join(data_dir, "meta.json")
 
     # --- Validate files exist ---
-    for path, name in [(train_path, "train.bin"), (val_path, "val.bin"), (meta_path, "meta.json")]:
+    for path, name in [(train_path, train_name), (val_path, val_name), (meta_path, "meta.json")]:
         if not os.path.exists(path):
             raise FileNotFoundError(
                 f"  [ERR] {name} not found at: {path}\n"

@@ -21,7 +21,7 @@ sys.modules["__main__"].GLM5Config = GLM5Config
 MODEL_STATE = {
     "model": None,
     "tokenizer": None,
-    "device": "cpu",
+    "device": "cpu" if torch.cuda.is_available() else "cpu",
     "checkpoint_path": None,
     "loaded": False,
 }
@@ -30,9 +30,13 @@ MODEL_STATE = {
 async def lifespan(app: FastAPI):
     """
     FastAPI Lifespan Context Manager.
-    Loads the trained Nano-GLM checkpoint into CPU memory once when the server starts.
+    Loads the trained Nano-GLM checkpoint into GPU/CPU memory once when the server starts.
     """
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device == "cuda":
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+    
     out_dir = "out_glm5"
     
     # Priority order for checkpoint loading
@@ -49,7 +53,7 @@ async def lifespan(app: FastAPI):
         yield
         return
 
-    print(f"  [STARTUP] Loading Nano-GLM model from {selected_ckpt}...")
+    print(f"  [STARTUP] Loading Nano-GLM model on {device.upper()} from {selected_ckpt}...")
     checkpoint = torch.load(selected_ckpt, map_location=device, weights_only=False)
     config = checkpoint["config"]
 
@@ -66,7 +70,7 @@ async def lifespan(app: FastAPI):
     MODEL_STATE["checkpoint_path"] = selected_ckpt
     MODEL_STATE["loaded"] = True
 
-    print(f"  [STARTUP] Model successfully loaded on {device}!")
+    print(f"  [STARTUP] Model successfully loaded on {device.upper()} ({torch.cuda.get_device_name(0) if device == 'cuda' else 'CPU'})!")
     yield
     print("  [SHUTDOWN] Cleaning up model state...")
     MODEL_STATE.clear()
@@ -141,8 +145,13 @@ def generate_text(req: GenerateRequest):
     
     idx = torch.tensor([tokens], dtype=torch.long, device=device)
 
-    # Generation context
-    with torch.no_grad():
+    # Generation context (with bfloat16 mixed precision on CUDA)
+    ctx = (
+        torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+        if device == "cuda" and torch.cuda.is_bf16_supported()
+        else contextlib.nullcontext()
+    )
+    with torch.no_grad(), ctx:
         output = model.generate(
             idx,
             max_new_tokens=req.max_new_tokens,
