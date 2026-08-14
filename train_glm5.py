@@ -605,7 +605,7 @@ class MultiLatentAttention(nn.Module):
         self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.indexer = None if self.skip_topk else DSAIndexer(config, layer_idx)
 
-    def forward(self, x, cos, sin, position_ids, prev_topk_indices=None):
+    def forward(self, x, cos, sin, position_ids, prev_topk_indices=None, use_cache=False, past_key_value=None):
         B, T, _ = x.shape
 
         # ============ Query Path ============
@@ -636,35 +636,46 @@ class MultiLatentAttention(nn.Module):
         q = torch.cat([q_nope, q_rope], dim=-1)  # [B, H, T, qk_head_dim=64]
         k = torch.cat([k_nope, k_rope], dim=-1)  # [B, H, T, qk_head_dim=64]
 
+        if past_key_value is not None:
+            past_k, past_v = past_key_value
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+
+        present_key_value = (k, v) if use_cache else None
+        T_total = k.shape[2]
+
         # ============ DSA: Sparse Token Selection ============
-        if self.indexer is not None:
-            # "Full" layer: run indexer to get fresh top-k indices
-            topk_indices = self.indexer(x, q_resid, cos, sin, position_ids)
-        else:
-            # "Shared" layer: reuse previous full layer's indices
-            assert prev_topk_indices is not None, (
-                f"Layer {self.layer_idx} is 'shared' DSA but got no previous top-k indices!"
-            )
-            topk_indices = prev_topk_indices
+        topk_indices = None
+        if past_key_value is None:
+            if self.indexer is not None:
+                # "Full" layer: run indexer to get fresh top-k indices
+                topk_indices = self.indexer(x, q_resid, cos, sin, position_ids)
+            else:
+                # "Shared" layer: reuse previous full layer's indices
+                assert prev_topk_indices is not None, (
+                    f"Layer {self.layer_idx} is 'shared' DSA but got no previous top-k indices!"
+                )
+                topk_indices = prev_topk_indices
 
         # ============ Attention Computation ============
-        attn_weights = torch.matmul(q, k.transpose(-1, -2)) * self.scaling  # [B, H, T, T]
+        attn_weights = torch.matmul(q, k.transpose(-1, -2)) * self.scaling  # [B, H, T, T_total]
 
         # Causal mask: prevent attending to future positions
-        causal_mask = torch.triu(
-            torch.full((T, T), torch.finfo(q.dtype).min, device=x.device, dtype=q.dtype),
-            diagonal=1,
-        )
-        attn_weights = attn_weights + causal_mask[None, None, :, :]
+        if past_key_value is None:
+            causal_mask = torch.triu(
+                torch.full((T, T), torch.finfo(q.dtype).min, device=x.device, dtype=q.dtype),
+                diagonal=1,
+            )
+            attn_weights = attn_weights + causal_mask[None, None, :, :]
 
-        # DSA sparse mask: ONLY attend to the indexer's top-k selected tokens
-        # index_mask[b, t, t'] = True → position t' is NOT selected → mask it out
-        index_mask = torch.ones(B, T, T, device=x.device, dtype=torch.bool)
-        index_mask.scatter_(-1, topk_indices.long(), False)  # Set selected positions to False (unmasked)
-        attn_weights = attn_weights.masked_fill(
-            index_mask.unsqueeze(1),  # [B, 1, T, T] — broadcast across heads
-            torch.finfo(q.dtype).min,
-        )
+            # DSA sparse mask: ONLY attend to the indexer's top-k selected tokens
+            # index_mask[b, t, t'] = True → position t' is NOT selected → mask it out
+            index_mask = torch.ones(B, T, T_total, device=x.device, dtype=torch.bool)
+            index_mask.scatter_(-1, topk_indices.long(), False)  # Set selected positions to False (unmasked)
+            attn_weights = attn_weights.masked_fill(
+                index_mask.unsqueeze(1),  # [B, 1, T, T_total] — broadcast across heads
+                torch.finfo(q.dtype).min,
+            )
 
         # Softmax + weighted sum of values
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(q.dtype)
@@ -674,6 +685,8 @@ class MultiLatentAttention(nn.Module):
         attn_output = attn_output.transpose(1, 2).reshape(B, T, self.num_heads * self.v_head_dim)
         attn_output = self.o_proj(attn_output)
 
+        if use_cache:
+            return attn_output, topk_indices, present_key_value
         return attn_output, topk_indices
 
 
@@ -706,11 +719,19 @@ class DecoderLayer(nn.Module):
         self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(self, x, cos, sin, position_ids, prev_topk_indices=None):
+    def forward(self, x, cos, sin, position_ids, prev_topk_indices=None, use_cache=False, past_key_value=None):
         # Pre-norm → Attention → Residual
         residual = x
         x = self.input_layernorm(x)
-        attn_out, topk_indices = self.self_attn(x, cos, sin, position_ids, prev_topk_indices)
+        
+        attn_outputs = self.self_attn(
+            x, cos, sin, position_ids, prev_topk_indices, 
+            use_cache=use_cache, past_key_value=past_key_value
+        )
+        attn_out = attn_outputs[0]
+        topk_indices = attn_outputs[1]
+        present_key_value = attn_outputs[2] if use_cache else None
+
         x = residual + attn_out
 
         # Pre-norm → MLP/MoE → Residual
@@ -718,6 +739,8 @@ class DecoderLayer(nn.Module):
         x = self.post_attention_layernorm(x)
         x = residual + self.mlp(x)
 
+        if use_cache:
+            return x, topk_indices, present_key_value
         return x, topk_indices
 
 
@@ -744,40 +767,58 @@ class GLM5Model(nn.Module):
         )
         self.gradient_checkpointing = False
 
-    def forward(self, input_ids):
+    def forward(self, input_ids, use_cache=False, past_key_values=None):
         B, T = input_ids.shape
-        assert T <= self.config.max_position_embeddings, (
-            f"Sequence length {T} > max_position_embeddings {self.config.max_position_embeddings}"
+        
+        past_length = 0
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+            
+        assert T + past_length <= self.config.max_position_embeddings, (
+            f"Sequence length {T + past_length} > max_position_embeddings {self.config.max_position_embeddings}"
         )
 
         x = self.embed_tokens(input_ids)
 
         # Compute position embeddings once (shared across all layers)
-        position_ids = torch.arange(T, device=input_ids.device).unsqueeze(0).expand(B, -1)
+        position_ids = torch.arange(past_length, past_length + T, device=input_ids.device).unsqueeze(0).expand(B, -1)
         cos, sin = self.rotary_emb(x, position_ids)
 
         # Forward through decoder layers
         # Each layer returns (hidden_states, topk_indices)
         # topk_indices propagate from "full" DSA layers to "shared" layers
         topk_indices = None
-        for layer in self.layers:
+        next_decoder_cache = [] if use_cache else None
+        
+        for idx, layer in enumerate(self.layers):
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
+            
             if self.gradient_checkpointing and self.training:
-                # gradient_checkpointing.checkpoint does not support None inputs.
-                # Pass a sentinel zero-tensor when topk_indices is None (layer 0 full-indexer layers),
-                # and detect it inside with a flag. Simpler: just skip checkpointing for the very
-                # first "full" layer (layer 0) which has no prev indices to receive.
                 if topk_indices is None:
-                    # Layer 0 is always a "full" DSA layer — run normally, then checkpoint the rest.
-                    x, topk_indices = layer(x, cos, sin, position_ids, None)
+                    layer_outputs = layer(
+                        x, cos, sin, position_ids, None,
+                        use_cache=use_cache, past_key_value=past_key_value
+                    )
+                    x, topk_indices = layer_outputs[0], layer_outputs[1]
                 else:
                     x, topk_indices = torch.utils.checkpoint.checkpoint(
                         layer, x, cos, sin, position_ids, topk_indices,
                         use_reentrant=False,
                     )
             else:
-                x, topk_indices = layer(x, cos, sin, position_ids, topk_indices)
+                layer_outputs = layer(
+                    x, cos, sin, position_ids, topk_indices,
+                    use_cache=use_cache, past_key_value=past_key_value
+                )
+                x = layer_outputs[0]
+                topk_indices = layer_outputs[1]
+                if use_cache:
+                    next_decoder_cache.append(layer_outputs[2])
 
-        return self.norm(x)
+        hidden_states = self.norm(x)
+        if use_cache:
+            return hidden_states, next_decoder_cache
+        return hidden_states
 
 
 class GLM5ForCausalLM(nn.Module):
@@ -815,7 +856,7 @@ class GLM5ForCausalLM(nn.Module):
         elif isinstance(module, TopKRouter):
             nn.init.normal_(module.weight, mean=0.0, std=std)
 
-    def forward(self, input_ids, targets=None):
+    def forward(self, input_ids, targets=None, use_cache=False, past_key_values=None):
         """
         Args:
             input_ids: [B, T] token indices
@@ -825,7 +866,12 @@ class GLM5ForCausalLM(nn.Module):
             logits: [B, T, vocab_size]
             loss: scalar if targets provided, else None
         """
-        hidden_states = self.model(input_ids)
+        model_outputs = self.model(input_ids, use_cache=use_cache, past_key_values=past_key_values)
+        if use_cache:
+            hidden_states, past_key_values = model_outputs
+        else:
+            hidden_states = model_outputs
+            
         logits = self.lm_head(hidden_states)
 
         loss = None
@@ -835,25 +881,36 @@ class GLM5ForCausalLM(nn.Module):
                 targets.view(-1),
                 ignore_index=-1,
             )
+            
+        if use_cache:
+            return logits, loss, past_key_values
         return logits, loss
 
     @torch.no_grad()
     def generate(self, idx, max_new_tokens, temperature=0.8, top_k=200):
         """
-        Simple autoregressive generation with temperature + top-k sampling.
-
-        No KV-cache for simplicity — recomputes the full context each step.
-        This is slower but simpler, and matches Karpathy's nanoGPT style.
+        Autoregressive generation with KV-cache.
         """
         self.eval()
+        
+        # Crop prompt if it exceeds max_position_embeddings
+        idx_cond = (
+            idx
+            if idx.size(1) <= self.config.max_position_embeddings
+            else idx[:, -self.config.max_position_embeddings :]
+        )
+        
+        # Step 1: Prefill phase
+        past_key_values = None
+        
         for _ in range(max_new_tokens):
-            # Crop to max context length if needed
-            idx_cond = (
-                idx
-                if idx.size(1) <= self.config.max_position_embeddings
-                else idx[:, -self.config.max_position_embeddings :]
-            )
-            logits, _ = self(idx_cond)
+            # Pass only the last token if we have cached keys/values
+            if past_key_values is not None:
+                idx_cond = idx[:, -1:]
+            
+            outputs = self(idx_cond, use_cache=True, past_key_values=past_key_values)
+            logits, _, past_key_values = outputs
+            
             logits = logits[:, -1, :] / temperature
 
             if top_k is not None:
@@ -863,6 +920,11 @@ class GLM5ForCausalLM(nn.Module):
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
+            
+            # Stop if max context length is reached
+            if idx.size(1) >= self.config.max_position_embeddings:
+                break
+                
         return idx
 
     def param_count(self):
