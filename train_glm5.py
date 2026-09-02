@@ -1057,29 +1057,35 @@ def get_batch(split, train_data, val_data, block_size, batch_size, device):
 # =============================================================================
 
 
-def get_lr(it, warmup_iters, lr_decay_iters, learning_rate, min_lr, stable_iters=0):
-    """WSD (Warmup-Stable-Decay) learning rate schedule.
+def get_lr(it, warmup_iters, lr_decay_iters, learning_rate, min_lr, stable_iters=0, warmup_start_iter=0):
+    """WSD (Warmup-Stable-Decay) learning rate schedule with optional warmup_start_iter.
+
+    Supports both standard pretraining (starting at step 0) and Continued
+    Pre-Training (CPT, starting warmup at warmup_start_iter).
 
     Phases:
-      1. Warmup:  steps [0, warmup_iters)           — linear ramp 0 → learning_rate
-      2. Stable:  steps [warmup_iters, stable_iters) — constant at learning_rate
-      3. Decay:   steps [stable_iters, lr_decay_iters] — cosine decay → min_lr
-
-    If stable_iters <= warmup_iters (default: 0), this reduces to the standard
-    cosine schedule with warmup (backward-compatible).
+      1. Warmup:  steps [warmup_start_iter, warmup_start_iter + warmup_iters)
+                  — linear ramp min_lr → learning_rate
+      2. Stable:  steps [warmup_start_iter + warmup_iters, stable_iters)
+                  — constant at learning_rate
+      3. Decay:   steps [stable_iters, lr_decay_iters]
+                  — cosine decay learning_rate → min_lr
     """
+    if it < warmup_start_iter:
+        return min_lr
     # Phase 1: Linear warmup
-    if it < warmup_iters:
-        return learning_rate * (it + 1) / warmup_iters
+    if it < warmup_start_iter + warmup_iters:
+        progress = (it - warmup_start_iter + 1) / max(1, warmup_iters)
+        return min_lr + progress * (learning_rate - min_lr)
     # Phase 3 ended: hold at min_lr
     if it > lr_decay_iters:
         return min_lr
-    # Phase 2: Stable (constant LR) — only if stable_iters is set
-    if stable_iters > warmup_iters and it < stable_iters:
+    # Phase 2: Stable (constant LR)
+    decay_start = max(stable_iters, warmup_start_iter + warmup_iters)
+    if it < decay_start:
         return learning_rate
     # Phase 3: Cosine decay from learning_rate → min_lr
-    decay_start = max(stable_iters, warmup_iters)
-    decay_ratio = (it - decay_start) / (lr_decay_iters - decay_start)
+    decay_ratio = (it - decay_start) / max(1, (lr_decay_iters - decay_start))
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
     return min_lr + coeff * (learning_rate - min_lr)
 
@@ -1249,7 +1255,15 @@ def train(args):
 
     for iter_num in range(start_iter, args.max_iters):
         # Update learning rate (WSD schedule: warmup → stable → cosine decay)
-        lr = get_lr(iter_num, args.warmup_iters, args.lr_decay_iters, args.learning_rate, args.min_lr, args.stable_iters)
+        lr = get_lr(
+            iter_num,
+            args.warmup_iters,
+            args.lr_decay_iters,
+            args.learning_rate,
+            args.min_lr,
+            args.stable_iters,
+            args.warmup_start_iter,
+        )
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
@@ -1403,6 +1417,7 @@ def main():
     parser.add_argument("--learning_rate", type=float, default=6e-4, help="Peak learning rate")
     parser.add_argument("--min_lr", type=float, default=6e-5, help="Minimum learning rate (end of cosine)")
     parser.add_argument("--warmup_iters", type=int, default=2000, help="LR warmup iterations")
+    parser.add_argument("--warmup_start_iter", type=int, default=0, help="Step at which warmup begins (for continued pre-training)")
     parser.add_argument("--lr_decay_iters", type=int, default=800000, help="Cosine decay length (match max_iters)")
     parser.add_argument("--stable_iters", type=int, default=0, help="WSD: keep LR at peak until this step, then cosine decay (0=standard cosine)")
     parser.add_argument("--weight_decay", type=float, default=0.1, help="Weight decay")

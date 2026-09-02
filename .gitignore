@@ -17,12 +17,14 @@ venv.bak/
 # Ignore large dataset binaries and numpy files
 data/
 data_phase3/
+data_cpt/
 *.bin
 *.npy
 *.txt
 
 # Ignore checkpoints and model output folder
 out_glm5/
+backup_*/
 *.pt
 
 # IDE / Editor
