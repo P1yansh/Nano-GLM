@@ -44,14 +44,15 @@ def iter_cosmopedia():
     """Stream synthetic textbook data from Cosmopedia v2."""
     from datasets import load_dataset
     try:
-        ds = load_dataset("HuggingFaceTB/cosmopedia-v2", split="train", streaming=True)
+        # Pass explicit config name 'cosmopedia-v2'
+        ds = load_dataset("HuggingFaceTB/cosmopedia-v2", "cosmopedia-v2", split="train", streaming=True)
         for example in ds:
             text = example.get("text", "")
             if text:
                 yield text
     except Exception as e:
         print(f"  [WARN] Cosmopedia v2 fallback to v1 due to: {e}")
-        ds = load_dataset("HuggingFaceTB/cosmopedia", "web_samples", split="train", streaming=True)
+        ds = load_dataset("HuggingFaceTB/cosmopedia", "web_samples_v2", split="train", streaming=True)
         for example in ds:
             text = example.get("text", "")
             if text:
