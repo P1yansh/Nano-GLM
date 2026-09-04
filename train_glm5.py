@@ -887,9 +887,18 @@ class GLM5ForCausalLM(nn.Module):
         return logits, loss
 
     @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=0.8, top_k=200):
+    def generate(
+        self,
+        idx,
+        max_new_tokens,
+        temperature=0.8,
+        top_k=200,
+        repetition_penalty=1.2,
+        min_p=0.08,
+        no_repeat_ngram_size=4,
+    ):
         """
-        Autoregressive generation with KV-cache.
+        Autoregressive generation with KV-cache, repetition penalty, Min-P, and N-gram blocking.
         """
         self.eval()
         
@@ -911,14 +920,55 @@ class GLM5ForCausalLM(nn.Module):
             outputs = self(idx_cond, use_cache=True, past_key_values=past_key_values)
             logits, _, past_key_values = outputs
             
-            logits = logits[:, -1, :] / temperature
+            logits = logits[:, -1, :] / max(temperature, 1e-5)
 
-            if top_k is not None:
-                v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-                logits[logits < v[:, [-1]]] = float("-inf")
+            # 1. Repetition penalty: penalize tokens already seen in the sequence
+            if repetition_penalty != 1.0:
+                for token_id in set(idx[0].tolist()):
+                    if logits[0, token_id] > 0:
+                        logits[0, token_id] /= repetition_penalty
+                    else:
+                        logits[0, token_id] *= repetition_penalty
 
-            probs = F.softmax(logits, dim=-1)
-            idx_next = torch.multinomial(probs, num_samples=1)
+            # 2. No-repeat N-gram blocking: mathematically forbid repeating phrases of length N
+            if no_repeat_ngram_size > 0 and idx.size(1) >= no_repeat_ngram_size:
+                seq = idx[0].tolist()
+                ngram_prefix = tuple(seq[-(no_repeat_ngram_size - 1):])
+                banned_tokens = set()
+                for i in range(len(seq) - no_repeat_ngram_size + 1):
+                    if tuple(seq[i : i + no_repeat_ngram_size - 1]) == ngram_prefix:
+                        banned_tokens.add(seq[i + no_repeat_ngram_size - 1])
+                if banned_tokens:
+                    logits[0, list(banned_tokens)] = float("-inf")
+
+            # 3. Sampling vs. Greedy (Argmax)
+            if temperature <= 0.01:
+                idx_next = torch.argmax(logits, dim=-1, keepdim=True)
+            else:
+                # Top-K filtering
+                if top_k is not None and top_k > 0:
+                    v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
+                    logits[logits < v[:, [-1]]] = float("-inf")
+
+                probs = F.softmax(logits, dim=-1)
+
+                # Min-P filtering: remove low-probability noise relative to top token confidence
+                if min_p is not None and min_p > 0.0:
+                    p_max = torch.max(probs, dim=-1, keepdim=True).values
+                    threshold = min_p * p_max
+                    probs = torch.where(probs < threshold, 0.0, probs)
+                    probs_sum = probs.sum(dim=-1, keepdim=True)
+                    if probs_sum > 0:
+                        probs = probs / probs_sum
+                    else:
+                        probs = F.softmax(logits, dim=-1)
+
+                idx_next = torch.multinomial(probs, num_samples=1)
+
+            # Stop if end-of-text / EOS token is produced
+            if idx_next.item() == 50256:  # gpt2 eot_token
+                break
+
             idx = torch.cat((idx, idx_next), dim=1)
             
             # Stop if max context length is reached
@@ -1279,6 +1329,11 @@ def train(args):
                 f"lr {lr:.2e}"
             )
 
+            # Update best validation loss if improved
+            is_best = losses["val"] < best_val_loss
+            if is_best:
+                best_val_loss = losses["val"]
+
             # Save latest checkpoint at every eval interval so progress is never lost
             ckpt = {
                 "model": raw_model.state_dict(),
@@ -1291,9 +1346,7 @@ def train(args):
             print(f"           [SAVED] latest checkpoint to {ckpt_path} (step {iter_num})")
 
             # Save separate best checkpoint when val loss improves
-            if losses["val"] < best_val_loss:
-                best_val_loss = losses["val"]
-                ckpt["best_val_loss"] = best_val_loss
+            if is_best:
                 best_ckpt_path = os.path.join(args.out_dir, "ckpt_best.pt")
                 torch.save(ckpt, best_ckpt_path)
                 print(f"           [SAVED] BEST checkpoint to {best_ckpt_path} (val_loss={best_val_loss:.4f})")
@@ -1384,6 +1437,9 @@ def sample(args):
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
             top_k=args.top_k,
+            repetition_penalty=args.repetition_penalty,
+            min_p=args.min_p,
+            no_repeat_ngram_size=args.no_repeat_ngram_size,
         )
 
     generated = enc.decode(output[0].tolist())
@@ -1447,6 +1503,9 @@ def main():
     parser.add_argument("--max_new_tokens", type=int, default=500, help="Max tokens to generate")
     parser.add_argument("--temperature", type=float, default=0.8, help="Sampling temperature")
     parser.add_argument("--top_k", type=int, default=200, help="Top-k sampling")
+    parser.add_argument("--repetition_penalty", type=float, default=1.2, help="Repetition penalty (1.0 = off, 1.2 = recommended)")
+    parser.add_argument("--min_p", type=float, default=0.08, help="Min-p sampling threshold (0.0 = off, 0.08 = recommended)")
+    parser.add_argument("--no_repeat_ngram_size", type=int, default=4, help="No-repeat ngram size (0 = off, 4 = recommended)")
 
     args = parser.parse_args()
 

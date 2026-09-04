@@ -326,6 +326,14 @@
             <div class="control-head"><label for="top-k">Top-K</label><span class="control-val" id="topk-val">40</span></div>
             <input type="range" id="top-k" min="1" max="100" step="1" value="40" oninput="document.getElementById('topk-val').innerText=this.value">
           </div>
+          <div class="control-item">
+            <div class="control-head"><label for="rep-penalty">Rep. Penalty</label><span class="control-val" id="rep-val">1.2</span></div>
+            <input type="range" id="rep-penalty" min="1.0" max="2.0" step="0.05" value="1.2" oninput="document.getElementById('rep-val').innerText=this.value">
+          </div>
+          <div class="control-item">
+            <div class="control-head"><label for="min-p">Min-P</label><span class="control-val" id="minp-val">0.08</span></div>
+            <input type="range" id="min-p" min="0.0" max="0.30" step="0.01" value="0.08" oninput="document.getElementById('minp-val').innerText=this.value">
+          </div>
         </div>
 
         <button type="submit" class="submit-btn" id="submit-btn"><span>Generate text</span></button>
@@ -364,6 +372,8 @@
     const temperature = parseFloat(document.getElementById('temp').value);
     const max_new_tokens = parseInt(document.getElementById('max-tokens').value);
     const top_k = parseInt(document.getElementById('top-k').value);
+    const repetition_penalty = parseFloat(document.getElementById('rep-penalty').value);
+    const min_p = parseFloat(document.getElementById('min-p').value);
 
     btn.disabled = true;
     btn.innerHTML = '<div class="spinner"></div><span>Generating…</span>';
@@ -374,7 +384,16 @@
       const response = await fetch('/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, temperature, max_new_tokens, top_k, seed: 42 })
+        body: JSON.stringify({
+          prompt,
+          temperature,
+          max_new_tokens,
+          top_k,
+          repetition_penalty,
+          min_p,
+          no_repeat_ngram_size: 4,
+          seed: 42
+        })
       });
       if (!response.ok) throw new Error('API server returned error status');
       const data = await response.json();

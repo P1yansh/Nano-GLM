@@ -32,7 +32,8 @@ async def lifespan(app: FastAPI):
     FastAPI Lifespan Context Manager.
     Loads the trained Nano-GLM checkpoint into GPU/CPU memory once when the server starts.
     """
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Pin inference to CPU by default to prevent competing with GPU training runs
+    device = os.environ.get("DEVICE", "cpu")
     if device == "cuda":
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
@@ -96,6 +97,9 @@ class GenerateRequest(BaseModel):
     max_new_tokens: int = Field(default=100, ge=1, le=500, description="Maximum new tokens to generate")
     temperature: float = Field(default=0.8, ge=0.0, le=2.0, description="Sampling temperature (0.0 = greedy)")
     top_k: int = Field(default=50, ge=0, le=200, description="Top-k sampling threshold (0 = disable)")
+    repetition_penalty: float = Field(default=1.2, ge=1.0, le=2.0, description="Repetition penalty (1.0 = off, 1.2 = recommended)")
+    min_p: float = Field(default=0.08, ge=0.0, le=1.0, description="Min-p sampling threshold (0.0 = disable, 0.08 = recommended)")
+    no_repeat_ngram_size: int = Field(default=4, ge=0, le=10, description="No-repeat ngram size (0 = disable, 4 = recommended)")
     seed: int = Field(default=42, description="Random seed for reproducibility (-1 for random)")
 
 class GenerateResponse(BaseModel):
@@ -157,6 +161,9 @@ def generate_text(req: GenerateRequest):
             max_new_tokens=req.max_new_tokens,
             temperature=req.temperature,
             top_k=req.top_k if req.top_k > 0 else None,
+            repetition_penalty=req.repetition_penalty,
+            min_p=req.min_p,
+            no_repeat_ngram_size=req.no_repeat_ngram_size,
         )
 
     t1 = time.time()
