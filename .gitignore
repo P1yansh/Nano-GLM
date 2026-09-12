@@ -32,6 +32,8 @@ backup_*/
 .idea/
 *.swp
 *.swo
+.ipynb_checkpoints/
+hello.ipynb
 
 # VSCode workspace / agents
 .agents/
