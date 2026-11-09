@@ -8,14 +8,6 @@
 > [!NOTE]
 > This central knowledge base aggregates all architectural decisions, training runs, empirical loss trajectories, bug diagnoses, hardware optimizations, decoding ablation studies, and operational blueprints across all agent conversations on the Nano-GLM codebase.
 
-> [!IMPORTANT]
-> This document aggregates knowledge across all four Antigravity chats working on Nano-GLM.
-> Included chats:
-> - Inference & Decoding Optimization (Chat ID: `3a8ef624-b9b0-432e-9c90-d471c6aa7228`)
-> - Pre-Training Dynamics, KV-Cache & CPT Pipeline (Chat ID: `287a6673-cf6a-47c7-af92-9383c70f34f3`)
-> - Medium Article & Architecture Communication (Chat ID: `84a8ebed-185b-4af6-86a0-e43eb3dba641`)
-> - Environment Setup, Parameter Counting & Complete Architecture Visualization (Chat ID: `8fe2ceb5-b7e5-4144-a774-0a6a4edf842d`)
-
 ---
 
 ## Table of Contents
