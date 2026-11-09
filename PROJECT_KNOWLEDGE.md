@@ -2,11 +2,6 @@
 
 > **Project:** Nano-GLM — A baby (~120M parameter) reproduction of GLM-5.2 (GLM MoE DSA) trained from scratch.
 > **Repository:** https://github.com/P1yansh/Nano-GLM.git
-> **Contributing Chats:**
-> 1. **Inference & Decoding Optimization Chat:** (ID: `3a8ef624-b9b0-432e-9c90-d471c6aa7228`)
-> 2. **Pre-Training Dynamics, KV-Cache Architecture & CPT Pipeline Chat:** (ID: `287a6673-cf6a-47c7-af92-9383c70f34f3`)
-> 3. **Medium Article & Architecture Communication Chat:** (ID: `84a8ebed-185b-4af6-86a0-e43eb3dba641`)
-> 4. **Environment Setup, Parameter Counting Mathematics & End-to-End Architecture Visualization Chat:** (ID: `8fe2ceb5-b7e5-4144-a774-0a6a4edf842d`)
 > **Last Updated:** 2026-09-08
 
 > [!NOTE]
