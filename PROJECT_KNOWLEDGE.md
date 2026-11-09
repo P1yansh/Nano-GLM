@@ -2,6 +2,7 @@
 
 > **Project:** Nano-GLM — A baby (~120M parameter) reproduction of GLM-5.2 (GLM MoE DSA) trained from scratch.
 > **Repository:** https://github.com/P1yansh/Nano-GLM.git
+
 > **Last Updated:** 2026-09-08
 
 > [!NOTE]
